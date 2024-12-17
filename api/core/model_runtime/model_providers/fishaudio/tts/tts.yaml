@@ -3,3 +3,17 @@ model_type: tts
 model_properties:
   word_limit: 1000
   audio_type: 'mp3'
+  default_voice: '雷军'
+  voices:
+    - mode: "雷军"
+      name: "雷军"
+      language: [ "zh-Hans", "en-US" ]
+    - mode: "AD学姐"
+      name: "AD学姐"
+      language: [ "zh-Hans", "en-US" ]
+    - mode: "央视配音"
+      name: "央视配音"
+      language: [ "zh-Hans", "en-US" ]
+    - mode: "芙宁娜"
+      name: "芙宁娜"
+      language: [ "zh-Hans", "en-US" ]

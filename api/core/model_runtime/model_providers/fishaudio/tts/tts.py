@@ -6,7 +6,6 @@ from core.model_runtime.errors.invoke import InvokeBadRequestError, InvokeError
 from core.model_runtime.errors.validate import CredentialsValidateFailedError
 from core.model_runtime.model_providers.__base.tts_model import TTSModel
 
-
 class FishAudioText2SpeechModel(TTSModel):
     """
     Model class for Fish.audio Text to Speech model.
@@ -30,11 +29,15 @@ class FishAudioText2SpeechModel(TTSModel):
         results = httpx.get(
             f"{api_base}/model",
             headers={"Authorization": f"Bearer {api_key}"},
-            params=params,
         )
 
         results.raise_for_status()
         data = results.json()
+
+        self.name_id_map = {
+            i["title"]: i["_id"]  # 键值对：标题作为键，ID作为值
+            for i in data["items"] # 遍历 data["items"] 列表中的每个项目
+        }
 
         return [{"name": i["title"], "value": i["_id"]} for i in data["items"]]
 
@@ -98,6 +101,14 @@ class FishAudioText2SpeechModel(TTSModel):
         """
 
         try:
+            self.get_tts_model_voices(
+                "",
+                credentials={
+                    "api_key": credentials["api_key"],
+                    "api_base": credentials["api_base"],
+                    "use_public_models": "false",
+                },
+            )
             word_limit = self._get_model_word_limit(model, credentials)
             if len(content_text) > word_limit:
                 sentences = self._split_text_into_sentences(content_text, max_length=word_limit)
@@ -128,18 +139,38 @@ class FishAudioText2SpeechModel(TTSModel):
         if not api_key:
             raise InvokeBadRequestError("API key is required")
 
-        with httpx.stream(
-            "POST",
-            api_url + "/v1/tts",
-            json={"text": content_text, "reference_id": voice, "latency": latency},
-            headers={
-                "Authorization": f"Bearer {api_key}",
-            },
-            timeout=None,
-        ) as response:
-            if response.status_code != 200:
-                raise InvokeBadRequestError(f"Error: {response.status_code} - {response.text}")
-            yield from response.iter_bytes()
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json"
+        }
+
+        payload = {
+            "text": content_text,
+            "reference_id": self.name_id_map[voice],
+        }
+
+
+        breakpoint()
+
+        try:
+            with httpx.Client() as client:
+                with client.stream(
+                    "POST",
+                    f"{api_url}/v1/tts",
+                    json=payload,
+                    headers=headers,
+                    timeout=None,
+                ) as response:
+                    if response.status_code != 200:
+                        error_text = response.text
+                        raise InvokeBadRequestError(f"Error: {response.status_code} - {error_text}")
+                    response.read()
+                    for chunk in response.iter_bytes():
+                        yield chunk
+        except httpx.RequestError as e:
+            raise InvokeBadRequestError(f"Request failed: {str(e)}")
+        except Exception as e:
+            raise InvokeBadRequestError(f"Unexpected error: {str(e)}")
 
     @property
     def _invoke_error_mapping(self) -> dict[type[InvokeError], list[type[Exception]]]:
